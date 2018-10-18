@@ -89,7 +89,12 @@ class Server
 
             $encoding = $request->getHeaderLine('content-transfer-encoding');
             if (! $encoding) {
-                $encoding = $sender->getContentTransferEncoding();
+//TODO added. 
+              $encoding = $request->getHeaderLine('content-encoding');  
+              if (!$encoding) {
+                  $encoding = $sender->getContentTransferEncoding();
+              }
+              $request->withHeader('content-encoding', 'base64');
             }
             // Force encode binary data to base64, because openssl_pkcs7 doesn't work with binary data
             if ($encoding != 'base64') {
