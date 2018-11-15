@@ -239,6 +239,7 @@ class Management
                 if ($mdnMode == PartnerInterface::MDN_MODE_ASYNC) {
                     $this->getLogger()->debug('Requested ASYNC MDN from partner, waiting for it');
                     $message->setStatus(MessageInterface::STATUS_PENDING);
+                    
                 } else {
                     // In case of Synchronous MDN the response content will be the MDN. So process it.
                     // Get the response headers, convert key to lower case for normalization
@@ -471,7 +472,7 @@ class Management
      * @param MessageInterface $message
      * @return bool|mixed|\Psr\Http\Message\ResponseInterface
      */
-    public function sendMdn(MessageInterface $message)
+    public function sendMdn(MessageInterface $message, $targetUrl = NULL)
     {
         try {
             $partner = $message->getReceiver();
@@ -483,7 +484,11 @@ class Management
             if ($partner->getAuthMethod()) {
                 $options['auth'] = [$partner->getAuthUser(), $partner->getAuthPassword(), $partner->getAuthMethod()];
             }
-            $response = $this->getHttpClient()->post($partner->getTargetUrl(), $options);
+            
+            if (!$targetUrl || !filter_var($targetUrl, FILTER_VALIDATE_URL)) {
+              $targetUrl = $partner->getTargetUrl(); 
+            }
+            $response = $this->getHttpClient()->post($targetUrl, $options);
             if ($response->getStatusCode() != 200) {
                 throw new \RuntimeException('Message send failed with error');
             }

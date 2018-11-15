@@ -19,6 +19,9 @@ class Server
      * @var StorageInterface
      */
     protected $storage;
+    
+    /** @var StorageInterface */
+    protected $storageOut; 
 
     /**
      * @var LoggerInterface
@@ -31,10 +34,11 @@ class Server
      * @param Management $management
      * @param StorageInterface $storage
      */
-    public function __construct(Management $management, StorageInterface $storage)
+    public function __construct(Management $management, StorageInterface $storage, StorageInterface $storageOut = NULL)
     {
         $this->manager = $management;
         $this->storage = $storage;
+        $this->storageOut = $storageOut ?? $storage;
     }
 
     /**
@@ -45,8 +49,9 @@ class Server
      * @return Response
      * @throws \RuntimeException|\InvalidArgumentException
      */
-    public function execute(ServerRequestInterface $request = null)
+    public function execute(ServerRequestInterface $request = null) : ?Response
     {
+        $answerAlreadySent = false; 
         if (! $request) {
             $request = ServerRequest::fromGlobals();
         }
@@ -87,16 +92,8 @@ class Server
 
             $body = $request->getBody()->getContents();
 
-            $encoding = $request->getHeaderLine('content-transfer-encoding');
-            if (! $encoding) {
-//TODO added. 
-              $encoding = $request->getHeaderLine('content-encoding');  
-              if (!$encoding) {
-                  $encoding = $sender->getContentTransferEncoding();
-              }
-              $request->withHeader('content-encoding', 'base64');
-            }
             // Force encode binary data to base64, because openssl_pkcs7 doesn't work with binary data
+            $encoding = $this->readEncoding($request, $sender);
             if ($encoding != 'base64') {
                 $request = $request->withHeader('Content-Transfer-Encoding', 'base64');
                 $body = Utils::encodeBase64($body);
@@ -134,7 +131,8 @@ class Server
             //            }
 
             // Check if message is signed and if so verify it
-            if ($payload->isSigned()) {
+            $isPayloadSigned = $payload->isSigned(); 
+            if ($isPayloadSigned) {
                 $this->getLogger()->debug('Inbound AS2 message is signed.');
                 $this->getLogger()->debug(sprintf('The sender used the algorithm "%s" to sign the inbound AS2 message.',
                     $micalg));
@@ -156,7 +154,6 @@ class Server
                 }
                 // TODO: AS2-Version: 1.1 multiple attachments
                 // Saving the message mic for sending it in the MDN
-                $message->setMic(CryptoHelper::calculateMIC($payload, $micalg));
                 $message->setSigned();
             }
 
@@ -165,6 +162,10 @@ class Server
                 $this->getLogger()->debug('Decompressing the payload');
                 $payload = CryptoHelper::decompress($payload);
                 $message->setCompressed();
+            }
+            
+            if ($isPayloadSigned) {
+                $message->setMic(CryptoHelper::calculateMIC($payload, $micalg));
             }
 
             //  If this is a MDN, get the Message-Id and check if it exists
@@ -178,24 +179,26 @@ class Server
                     }
                 }
                 $this->getLogger()->debug('Asynchronous MDN received for AS2 message', [$messageId]);
-                $message = $this->storage->getMessage($messageId);
+                $message = $this->storageOut->getMessage($messageId);
                 if (! $message) {
                     throw new \InvalidArgumentException('Unknown AS2 MDN received. Will not be processed');
                 }
                 $this->manager->processMdn($message, $payload);
-                $this->storage->saveMessage($message);
+                $this->storageOut->saveMessage($message);
                 $responseBody = 'AS2 ASYNC MDN has been received';
             } else {
 
                 $message->setPayload((string) $payload);
                 $message->setStatus(MessageInterface::STATUS_SUCCESS);
                 // $this->manager->processMessage($message, $payload);
+                
+                $sMdnURL = $request->getHeaderLine('Disposition-Notification-To');
+                $asyncMdnLine = $request->getHeaderLine('Receipt-Delivery-Option');
 
                 // if MDN enabled than send notification
-                if ($mdnMode = $receiver->getMdnMode()) {
+                if ($sMdnURL) { //mdnMode = $receiver->getMdnMode()) { //TODO use Receipt-Delivery-Option to determinate if sync or async (7.3)
                     $mdn = $this->manager->buildMdn($message);
-                    $message->setMdnStatus(MessageInterface::MDN_STATUS_SENT);
-                    if ($mdnMode == PartnerInterface::MDN_MODE_SYNC) {
+                    if (!$asyncMdnLine) { // $mdnMode == PartnerInterface::MDN_MODE_SYNC) {
                         $this->getLogger()->debug(sprintf('Synchronous MDN sent as answer to message "%s".',
                             $messageId));
                         $responseHeaders = $mdn->getHeaders();
@@ -203,8 +206,24 @@ class Server
                     } else {
                         $this->getLogger()->debug(sprintf('Asynchronous MDN sent as answer to message "%s".',
                             $messageId));
-                        $this->manager->sendMdn($message);
+                        
+                        //send the empty http response now.
+                        ignore_user_abort(true); 
+                        set_time_limit(0); 
+                        ob_start(); 
+                        http_response_code(200);
+                        header('Connection: close');
+                        header('Content-Length: 0'); 
+                        echo("Message received successfully"); 
+                        ob_end_flush();
+                        ob_flush();
+                        flush(); 
+                        $answerAlreadySent = true;  
+                        
+                        //send the MDN
+                        $this->manager->sendMdn($message, $asyncMdnLine);
                     }
+                    $message->setMdnStatus(MessageInterface::MDN_STATUS_SENT);
                 }
 
                 $this->storage->saveMessage($message);
@@ -220,7 +239,22 @@ class Server
             $responseBody = $e->getMessage();
         }
 
+        if ($answerAlreadySent) return null;
         return new Response($responseStatus, $responseHeaders, $responseBody);
+    }
+    
+    /** @param ServerRequestInterface $request
+     *  @return string */
+    protected function readEncoding(ServerRequestInterface $request, PartnerInterface $sender) : string {
+      $result = $request->getHeaderLine('content-transfer-encoding');
+      if (! $result) {
+        $result = $request->getHeaderLine('content-encoding');
+        if (!$result) {
+          $result = $sender->getContentTransferEncoding();
+        }
+        $request->withHeader('content-transfer-encoding', 'base64');
+      }
+      return $result;       
     }
 
     /**

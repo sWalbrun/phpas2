@@ -260,6 +260,11 @@ class MimePart implements MessageInterface
         } else {
             $boundary = $this->getParsedHeader('content-type', 0, 'boundary');
             if ($boundary) {
+                $isBase64contentTransferEncoding = ($this->getHeaderLine('content-transfer-encoding') === 'base64'); 
+                if ($isBase64contentTransferEncoding) {
+                  $body = base64_decode($body);
+                }
+              
                 $separator = '--' . preg_quote($boundary, '/');
                 // Get multi-part content
                 if (preg_match('/' . $separator . '\r?\n(.+?)\r?\n' . $separator . '--/s', $body, $matches)) {
