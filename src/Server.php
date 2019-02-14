@@ -230,10 +230,16 @@ class Server
         } catch (\Exception $e) {
 
             // $mdn = $this->manager->buildMdn($message, null, $e->getMessage());
-
             $this->getLogger()->critical($e->getMessage());
             $responseStatus = 500;
-            $responseBody = $e->getMessage();
+            $errorMessage = $e->getMessage();
+            $responseBody = $errorMessage;
+            if (isset($message)) try {
+              $message->setStatus(MessageInterface::STATUS_ERROR);
+              $message->setStatusMsg($e->getMessage());
+            } catch(\Exception $err2) {
+            }
+            
         }
 
         if ($answerAlreadySent) return null;
