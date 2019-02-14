@@ -135,7 +135,7 @@ class Server
             if ($isPayloadSigned) {
                 $this->getLogger()->debug('Inbound AS2 message is signed.');
                 $this->getLogger()->debug(sprintf('The sender used the algorithm "%s" to sign the inbound AS2 message.',
-                    $micalg));
+                  (empty($micalg) ? '???' : $micalg)));
                 $this->getLogger()->debug('Using certificate to verify inbound AS2 message signature.');
                 if (! CryptoHelper::verify($payload, $sender->getCertificate())) {
                     throw new \RuntimeException('Signature Verification Failed');
@@ -210,14 +210,11 @@ class Server
                         //send the empty http response now.
                         ignore_user_abort(true); 
                         set_time_limit(0); 
-                        ob_start(); 
                         http_response_code(200);
                         header('Connection: close');
                         header('Content-Length: 0'); 
                         echo("Message received successfully"); 
-                        ob_end_flush();
-                        ob_flush();
-                        flush(); 
+                        flush();
                         $answerAlreadySent = true;  
                         
                         //send the MDN
