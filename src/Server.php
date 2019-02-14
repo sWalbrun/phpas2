@@ -237,6 +237,7 @@ class Server
             if (isset($message)) try {
               $message->setStatus(MessageInterface::STATUS_ERROR);
               $message->setStatusMsg($e->getMessage());
+              $this->storage->saveMessage($message); 
             } catch(\Exception $err2) {
             }
             
