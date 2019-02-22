@@ -145,15 +145,22 @@ class Management
         }
 
         //  If MDN is to be requested from the partner, set the appropriate headers
-        if ($receiver->getMdnMode()) {
-
-            $as2headers['Disposition-Notification-To'] = $sender->getTargetUrl();
-            $as2headers['Disposition-Notification-Options'] = $receiver->getMdnOptions();
+        $receiverMdnMode = $receiver->getMdnMode();
+        if ($receiverMdnMode) {
+            //receiver gets url for mdn
+            $senderTargetUrl = $sender->getTargetUrl();
+            $as2headers['Disposition-Notification-To'] = $senderTargetUrl;
+            
+            //receiver should sign the mdn (or not)
+            $mdnSignOptions = $receiver->getMdnOptions();
+            if ($mdnSignOptions) {
+              $as2headers['Disposition-Notification-Options'] = $mdnSignOptions;
+            }
 
             // PARTNER IS ASYNC MDN
-            if ($receiver->getMdnMode() == PartnerInterface::MDN_MODE_ASYNC) {
+            if ($receiverMdnMode == PartnerInterface::MDN_MODE_ASYNC) {
                 $message->setMdnMode(PartnerInterface::MDN_MODE_ASYNC);
-                $as2headers['Receipt-Delivery-Option'] = $sender->getTargetUrl();
+                $as2headers['Receipt-Delivery-Option'] = $senderTargetUrl;
             } else {
                 $message->setMdnMode(PartnerInterface::MDN_MODE_SYNC);
             }
