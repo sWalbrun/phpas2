@@ -260,8 +260,10 @@ class MimePart implements MessageInterface
         } else {
             $boundary = $this->getParsedHeader('content-type', 0, 'boundary');
             if ($boundary) {
-                $isBase64contentTransferEncoding = ($this->getHeaderLine('content-transfer-encoding') === 'base64'); 
-                if ($isBase64contentTransferEncoding) {
+                $isBase64contentTransferEncoding = ($this->getHeaderLine('content-transfer-encoding') === 'base64');
+                // there is no char - in base64,
+                // but the content must contain --
+                if ($isBase64contentTransferEncoding && !str_contains($body, '--')) {
                   $body = base64_decode($body);
                 }
               
