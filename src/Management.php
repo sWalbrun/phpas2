@@ -258,6 +258,7 @@ class Management
                     $this->processMdn($message, $payload);
                 }
             } else {
+                $message->setMdnStatus(MessageInterface::MDN_STATUS_NA);
                 $this->getLogger()->debug('No MDN needed, File Transferred successfully to the partner');
             }
 

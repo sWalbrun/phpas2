@@ -221,6 +221,8 @@ class Server
                         $this->manager->sendMdn($message, $asyncMdnLine);
                     }
                     $message->setMdnStatus(MessageInterface::MDN_STATUS_SENT);
+                } else { //!$sMdnURL, no mdn claimed
+                  $message->setMdnStatus(MessageInterface::MDN_STATUS_NA);
                 }
 
                 $this->storage->saveMessage($message);

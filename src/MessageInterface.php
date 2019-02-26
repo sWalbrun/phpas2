@@ -15,6 +15,7 @@ interface MessageInterface
     const MDN_STATUS_RECEIVED = 'received';
     const MDN_STATUS_SENT = 'sent';
     const MDN_STATUS_ERROR = 'error';
+    const MDN_STATUS_NA = 'no_mdn';
 
     const DIR_INBOUND = 1;
     const DIR_OUTBOUND = 0;
