@@ -141,18 +141,22 @@ class CryptoHelper
 
     /**
      * @param string|MimePart $data
-     * @param mixed $cert
-     * @param mixed $key
+     * @param string $cert
+     * @param string|null $key
+     * @param string|null $keyPassphrase
      * @return MimePart
      * @throws \RuntimeException
      */
-    public static function decrypt($data, $cert, $key = null)
+    public static function decrypt($data, $cert, $key = null, $keyPassphrase = null)
     {
         if ($data instanceof MimePart) {
             $data = self::getTempFilename((string) $data);
         }
         $temp = self::getTempFilename();
-        if (! openssl_pkcs7_decrypt($data, $temp, $cert, $key)) {
+        //if there is a passphrase for the private key, it must be appended to the key. 
+        $keyArray = (empty($keyPassphrase) ? $key : [$key, $keyPassphrase]);
+        
+        if (! openssl_pkcs7_decrypt($data, $temp, $cert, $keyArray)) {
             throw new \RuntimeException(
                 sprintf('Failed to decrypt S/Mime message. Error: "%s".', openssl_error_string())
             );
