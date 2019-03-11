@@ -217,8 +217,10 @@ class CryptoHelper
     public static function decompress($data, $encoding = MimePart::ENCODING_BASE64)
     {
         if ($data instanceof MimePart) {
-            // $encoding = $data->getHeaderLine('Content-Transfer-Encoding');
             $encoding = $data->getHeaderLine('Content-Encoding');
+            if (empty($encoding)) {
+              $encoding = $data->getHeaderLine('Content-Transfer-Encoding');
+            }
             $data = $data->getBody();
         }
 
