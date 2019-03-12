@@ -2,6 +2,8 @@
 
 namespace AS2;
 
+use http\Exception\RuntimeException;
+
 class Utils
 {
     /**
@@ -24,9 +26,31 @@ class Utils
     public static function normalizeMic($mic)
     {
         $mic = explode(',', $mic, 2);
-        $mic[1] = strtolower(str_replace('-', '', $mic[1]));
+        $mic[1] = trim(strtolower(str_replace('-', '', $mic[1])));
 
-        return implode(',', $mic);
+        return implode(', ', $mic);
+    }
+  
+  /**
+   * @param $mic
+   * @return string
+   * @throws \RuntimeException
+   */
+    public static function readMicAlgoOrFail($mic) : string {
+      $mic = explode(',', $mic, 2);
+      
+      $micAlgo = trim(strtolower($mic[1]));
+      if (in_array($micAlgo, hash_algos())) {
+        return $micAlgo;
+      }
+      
+      $micAlgo = str_replace('-', '', $micAlgo);
+      if (in_array($micAlgo, hash_algos())) {
+        return $micAlgo;
+      }
+      
+      throw new RuntimeException('unknown hash algo ' . $micAlgo);
+      
     }
 
     /**
