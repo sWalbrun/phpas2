@@ -147,6 +147,13 @@ class Server
         // Saving the message mic for sending it in the MDN
         $message->setSigned();
       }
+  
+      //calculate the MIC before decompression (Mendelson Software does so)
+      
+      $xyxy = CryptoHelper::calculateMIC($payload, $micalg); //TODO delete
+      if ($isPayloadSigned) {
+        $message->setMic(CryptoHelper::calculateMIC($payload, $micalg));
+      }
       
       // Check if the message has been compressed and if so decompress it
       if ($payload->isCompressed()) {
@@ -155,9 +162,10 @@ class Server
         $message->setCompressed();
       }
       
-      if ($isPayloadSigned) {
+      //calculate the MIC after decompression (tiamo did so)
+      /*if ($isPayloadSigned) {
         $message->setMic(CryptoHelper::calculateMIC($payload, $micalg));
-      }
+      }*/
       
       //  If this is a MDN, get the Message-Id and check if it exists
       if ($payload->isReport()) {
