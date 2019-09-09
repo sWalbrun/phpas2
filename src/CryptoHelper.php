@@ -2,6 +2,8 @@
 
 namespace AS2;
 
+use phpseclib\File\ASN1;
+
 /**
  * TODO: Implement pure methods without "openssl_pkcs7"
  * openssl_pkcs7 doesn't work with binary data
@@ -32,7 +34,7 @@ class CryptoHelper
             $includeHeaders ? $payload : $payload->getBody(),
             true
         ));
-
+  
         return $digest . ', ' . $algo;
     }
 
@@ -127,7 +129,7 @@ class CryptoHelper
             $data = self::getTempFilename((string) $data);
         }
         if (is_string($cipher) && defined('OPENSSL_CIPHER_' . strtoupper($cipher))) {
-            $cipher = constant('OPENSSL_CIPHER_' . strtoupper($cipher));
+          $cipher = constant('OPENSSL_CIPHER_' . strtoupper($cipher));
         }
         $temp = self::getTempFilename();
         if (! openssl_pkcs7_encrypt($data, $temp, (array) $cert, [], PKCS7_BINARY, $cipher)) {
@@ -183,23 +185,32 @@ class CryptoHelper
             'Content-Type' => MimePart::TYPE_PKCS7_MIME . '; name="smime.p7z"; smime-type=' . MimePart::SMIME_TYPE_COMPRESSED,
             'Content-Description' => 'S/MIME Compressed Message',
             'Content-Disposition' => 'attachment; filename="smime.p7z"',
-            'Content-Encoding' => $encoding,
+//            'Content-Encoding' => $encoding,
+            'Content-Transfer-Encoding' => $encoding,
         ];
 
-        $content = ASN1Helper::encodeDER([
-            'contentType' => ASN1Helper::COMPRESSED_DATA_OID,
-            'content' => ASN1Helper::encodeDER([
+        /*$content = ASN1Helper::encodeDER(gzcompress($content), [
+          'type' => ASN1::TYPE_GENERAL_STRING //OCTET_STRING
+        ]);*/
+        $contentAsn1Compressed =
+      ASN1Helper::encodeDER([
                 'version' => 0,
                 'compression' => [
                     'algorithm' => ASN1Helper::ALG_ZLIB_OID,
                 ],
+//                'encapContentInfo' => gzcompress($content)
                 'payload' => [
                     'contentType' => ASN1Helper::ENVELOPED_DATA_OID,
                     'content' => gzcompress($content),
                 ],
-            ], ASN1Helper::COMPRESSED_DATA_MAP),
-        ], ASN1Helper::CONTENT_INFO_MAP);
-
+            ], ASN1Helper::COMPRESSED_DATA_MAP);
+        
+        $content = ASN1Helper::encodeDER([
+            'contentType' => ASN1Helper::COMPRESSED_DATA_OID,
+            'content' => $contentAsn1Compressed
+      ,
+        ], ASN1Helper::CONTENT_INFO_MAP_WITH_FILTER);
+        
         if ($encoding == MimePart::ENCODING_BASE64) {
             $content = Utils::encodeBase64($content);
         }
@@ -228,7 +239,12 @@ class CryptoHelper
             $data = base64_decode($data);
         }
 
-        $payload = ASN1Helper::decodeDER($data, ASN1Helper::CONTENT_INFO_MAP);
+        $payload = null;
+        try {
+          $payload = ASN1Helper::decodeDER($data, ASN1Helper::CONTENT_INFO_MAP_WITH_FILTER);
+        } catch (\Exception $err) {
+          $payload = ASN1Helper::decodeDER($data, ASN1Helper::CONTENT_INFO_MAP);
+        }
 
         if ($payload['contentType'] == ASN1Helper::COMPRESSED_DATA_OID) {
             $compressed = ASN1Helper::decodeDER($payload['content'], ASN1Helper::COMPRESSED_DATA_MAP);
