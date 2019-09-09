@@ -3,6 +3,7 @@
 namespace AS2;
 
 use GuzzleHttp\Client;
+use mysql_xdevapi\Exception;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
@@ -10,6 +11,7 @@ class Management
 {
     const AS2_VERSION = '1.2';
     const USER_AGENT = 'PHPAS2';
+    const MIC_OF_COMPRESSED_DATA = true;
 
     /**
      * @var LoggerInterface
@@ -80,10 +82,17 @@ class Management
             throw new \InvalidArgumentException('Unknown Receiver');
         }
 
-        $message->setStatus(MessageInterface::STATUS_PENDING);
-        $message->setPayload($payload);
-
         $this->getLogger()->debug('Build the AS2 message to send to the partner');
+        
+        $message->setStatus(MessageInterface::STATUS_PENDING);
+        if (! ($payload instanceof MimePart)) {
+            $payload = MimePart::fromString($payload);
+        }
+        $message->setPayload($payload);
+        $micContent = '';
+        if (!(self::MIC_OF_COMPRESSED_DATA)) {
+          $micContent = Utils::canonicalize($payload);
+        }
 
         // Build the As2 message headers as per specifications
         $as2headers = [
@@ -99,17 +108,16 @@ class Management
             'Ediint-Features' => 'CEM',
         ];
 
-        if (! ($payload instanceof MimePart)) {
-            $payload = MimePart::fromString($payload);
-        }
-
-        $micContent = Utils::canonicalize($payload);
 
         // Compress the message if requested in the profile
         if ($receiver->getCompressionType()) {
             $this->getLogger()->debug('Compress the message');
             $payload = CryptoHelper::compress($payload);
             $message->setCompressed();
+        }
+        
+        if (self::MIC_OF_COMPRESSED_DATA) {
+          $micContent = Utils::canonicalize($payload);
         }
 
         // Sign the message if requested in the profile
@@ -242,7 +250,8 @@ class Management
             $this->getLogger()->debug('AS2 message successfully sent to partner');
 
             // Process the MDN based on the partner profile settings
-            if ($mdnMode = $partner->getMdnMode()) {
+            $mdnMode = $partner->getMdnMode();
+            if ($mdnMode) {
                 if ($mdnMode == PartnerInterface::MDN_MODE_ASYNC) {
                     $this->getLogger()->debug('Requested ASYNC MDN from partner, waiting for it');
                     $message->setStatus(MessageInterface::STATUS_PENDING);
@@ -340,7 +349,10 @@ class Management
                         $mdnStatus = $bodyPayload->getParsedHeader('Disposition', 0, 1);
                         if ($mdnStatus == 'processed') {
                             $this->getLogger()->debug('Message has been successfully processed, verifying the MIC if present.');
+                            
                             // Compare the MIC of the received message
+                            $this->compareMicOfMdnOrFail($bodyPayload, $message);
+                            /*
                             $receivedMic = $bodyPayload->getHeaderLine('Received-Content-MIC');
                             $messageMic = $message->getMic();
                             if ($receivedMic && $message->getMic()) {
@@ -365,7 +377,7 @@ class Management
                                     }
                                 }
                             }
-                            $message->setMdnStatus(MessageInterface::MDN_STATUS_RECEIVED);
+                            $message->setMdnStatus(MessageInterface::MDN_STATUS_RECEIVED);*/
                             $this->getLogger()->debug('File Transferred successfully to the partner');
                         } else {
                             throw new \Exception('Partner failed to process file. ' . $mdnStatus);
@@ -382,6 +394,72 @@ class Management
         }
 
         return false;
+    }
+    
+    private function compareMicWith(string $receivedMic, $x, ?MessageInterface $message = null) : bool {
+      $messageMic2 = "";
+      if ($x instanceof MimePart) {
+        $messageMic2 = CryptoHelper::calculateMIC($x);
+      } elseif ($x instanceof MessageInterface) {
+        $messageMic2 = $x->getMic();
+        if (!($messageMic2)) {return true;}
+      } elseif ($x instanceof string) {
+        $messageMic2 = $x;
+      } else {
+        throw new Exception('unknown type for $x');
+      }
+      
+      $messageMic2 = Utils::normalizeMic($messageMic2);
+      if ($messageMic2 == $receivedMic) {
+        if (!is_null($message)) {
+          if ($message->getMic() != $messageMic2) {
+          $message->setMic($messageMic2);
+          }
+          $message->setMdnStatus(MessageInterface::MDN_STATUS_RECEIVED);
+        }
+        return true;
+      } else {
+        return false;
+      }
+    }
+    
+    private function compareMicOfMdnOrFail(MimePart $bodyPayload, MessageInterface $message) : void {
+      $receivedMic = $bodyPayload->getHeaderLine('Received-Content-MIC');
+      if ($receivedMic) {
+        $receivedMic = Utils::normalizeMic($receivedMic);
+        
+        //compare with the pre-calculated mic
+        if ($this->compareMicWith($receivedMic, $message)) {
+          return;
+        }
+        
+        //check, if partner used a different mic algo and recalcute mic with given algo
+        $receivedMicAlgo = Utils::readMicAlgoOrFail($receivedMic);
+        $messagePayload = $message->getPayload();
+        if ($messagePayload instanceof string) {
+          $messagePayload = MimePart::fromString($messagePayload);
+        }
+        if ($this->compareMicWith($receivedMic, $messagePayload, $message)) {
+          return;
+        }
+        
+        //check if MIC is calculated on compressed data
+        $messagePayload = CryptoHelper::compress($messagePayload);
+        if ($this->compareMicWith($receivedMic, $messagePayload, $message)) {
+          return;
+        }
+        
+        //all failed
+        
+        $message->setMdnStatus(MessageInterface::MDN_STATUS_ERROR);
+        throw new \Exception(
+              sprintf('The Message Integrity Code (MIC) does not match the sent AS2 message (required: %s, returned: %s)',
+                $message->getMic(),
+                $receivedMic
+              )
+        );
+        
+      }
     }
 
     /**
