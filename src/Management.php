@@ -352,32 +352,7 @@ class Management
                             
                             // Compare the MIC of the received message
                             $this->compareMicOfMdnOrFail($bodyPayload, $message);
-                            /*
-                            $receivedMic = $bodyPayload->getHeaderLine('Received-Content-MIC');
-                            $messageMic = $message->getMic();
-                            if ($receivedMic && $message->getMic()) {
-                                $messageMic = Utils::normalizeMic($messageMic);
-                                $receivedMic = Utils::normalizeMic($receivedMic);
-                                if ($messageMic != $receivedMic) {
-                                    //mic failed
-                                    //check, if partner used a different mic algo and recalcute mic with given algo
-                                    $receivedMicAlgo = Utils::readMicAlgoOrFail($receivedMic);
-                                    $messageMic2 = CryptoHelper::calculateMIC($message->getPayload(), $receivedMicAlgo);
-                                    $messageMic2 = Utils::normalizeMic($messageMic2);
-                                    if ($messageMic2 == $receivedMic) {
-                                      $message->setMic($messageMic2);
-                                    } else {
-                                  
-                                    throw new \Exception(
-                                        sprintf('The Message Integrity Code (MIC) does not match the sent AS2 message (required: %s, returned: %s)',
-                                            $message->getMic(),
-                                            $receivedMic
-                                        )
-                                    );
-                                    }
-                                }
-                            }
-                            $message->setMdnStatus(MessageInterface::MDN_STATUS_RECEIVED);*/
+                            $message->setMdnStatus(MessageInterface::MDN_STATUS_RECEIVED);
                             $this->getLogger()->debug('File Transferred successfully to the partner');
                         } else {
                             throw new \Exception('Partner failed to process file. ' . $mdnStatus);
