@@ -72,6 +72,8 @@ class ASN1Helper extends ASN1
             'payload' => self::CONTENT_INFO_MAP,
         ],
     ];
+    
+    const CONTENT_INFO_MAP_WITH_FILTER = self::CONTENT_INFO_MAP;
 
     /**
      * @param string $data
