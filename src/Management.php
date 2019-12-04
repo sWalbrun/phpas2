@@ -277,6 +277,9 @@ class Management
 
         } catch (\Exception $e) {
             $this->getLogger()->critical($e->getMessage());
+            if (empty($message->getStatusMsg())) {
+                $message->setStatusMsg($e->getMessage());
+            }
             $message->setStatus(MessageInterface::STATUS_ERROR);
         }
 
