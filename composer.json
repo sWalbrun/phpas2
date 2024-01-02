@@ -20,7 +20,7 @@
     "php": ">=5.5",
     "ext-openssl": "*",
     "psr/log": "^3.0",
-    "guzzlehttp/guzzle": "^6.3",
+    "guzzlehttp/guzzle": "^7.0",
     "phpseclib/phpseclib": "^3.0"
   },
   "require-dev": {
