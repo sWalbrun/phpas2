@@ -3,8 +3,11 @@
 namespace AS2;
 
 use GuzzleHttp\Psr7\MessageTrait;
+use GuzzleHttp\Psr7\Utils as PsrUtils;
 use Psr\Http\Message\MessageInterface;
 use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\StreamInterface;
+use Psy\Readline\Hoa\StreamIn;
 
 class MimePart implements MessageInterface
 {
@@ -227,7 +230,7 @@ class MimePart implements MessageInterface
      *
      * @return string
      */
-    public function getBody()
+    public function getBody(): StreamInterface
     {
         $body = $this->body;
         if (count($this->parts) > 0) {
@@ -242,7 +245,8 @@ class MimePart implements MessageInterface
                 $body .= '--' . $boundary . '--' . self::EOL;
             }
         }
-        return $body;
+
+        return PsrUtils::streamFor($body);
     }
 
     /**
@@ -266,7 +270,7 @@ class MimePart implements MessageInterface
                 if ($isBase64contentTransferEncoding && !str_contains($body, '--')) {
                   $body = base64_decode($body);
                 }
-              
+
                 $separator = '--' . preg_quote($boundary, '/');
                 // Get multi-part content
                 if (preg_match('/' . $separator . '\r?\n(.+?)\r?\n' . $separator . '--/s', $body, $matches)) {
